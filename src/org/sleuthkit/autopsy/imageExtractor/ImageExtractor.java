@@ -12,8 +12,16 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
+import org.apache.poi.hslf.model.Picture;
+import org.apache.poi.hslf.usermodel.PictureData;
+import org.apache.poi.hslf.usermodel.SlideShow;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.hwpf.HWPFDocument;
 import org.apache.poi.hwpf.model.PicturesTable;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xslf.usermodel.XMLSlideShow;
+import org.apache.poi.xslf.usermodel.XSLFPictureData;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFPictureData;
 import org.openide.util.Exceptions;
@@ -79,11 +87,27 @@ public class ImageExtractor {
             case docx:
                 extractedImages = extractImagesFromDocx(abstractFile);
                 break;
+            case ppt:
+                extractedImages = extractImagesFromPpt(abstractFile);
+                break;
+            case pptx:
+                extractedImages = extractImagesFromPptx(abstractFile);
+                break;
+            case xls:
+                extractedImages = extractImagesFromXls(abstractFile);
+                break;
+            case xlsx:
+                extractedImages = extractImagesFromXlsx(abstractFile);
+                break;
             default:
                 logger.log(Level.WARNING, "No image extraction attempted for {0}", abstractFile.getName());
                 throw new Exception("No image extraction attempted for " + abstractFile.getName());
         }
 
+        if (extractedImages == null) {
+            logger.log(Level.WARNING, "extractImage method failed for AbstractFile:  {0}", abstractFile.getName());
+            throw new Exception("extractImage method failed for AbstractFile: " + abstractFile.getName());
+        }
         // the common task of adding abstractFile to derivedfiles is performed.
         for (ExtractedImage extractedImage : extractedImages) {
             try {
@@ -114,20 +138,21 @@ public class ImageExtractor {
         }
         PicturesTable pictureTable = docA.getPicturesTable();
         List<org.apache.poi.hwpf.usermodel.Picture> listOfAllPictures = pictureTable.getAllPictures();
+        String outputFolderPath;
+        if (listOfAllPictures.isEmpty()) {
+            return null;
+        } else {
+            outputFolderPath = getOutputFolderPath(parentFileName);
+        }
+        if (outputFolderPath == null) {
+            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: " + af.getName());
+            return null;
+        }
         for (org.apache.poi.hwpf.usermodel.Picture picture : listOfAllPictures) {
             FileOutputStream fos = null;
             String fileName = picture.suggestFullFileName();
             try {
-                String outputPath = moduleDirAbsolute + File.separator + parentFileName;
-                File outputFilePath = new File(outputPath);
-                if (!outputFilePath.exists()) {
-                    try {
-                        outputFilePath.mkdirs();
-                    } catch (SecurityException ex) {
-                        logger.log(Level.WARNING, "Unable to create the output path to write the extracted image",ex);
-                    }
-                }
-                fos = new FileOutputStream(moduleDirAbsolute + File.separator + parentFileName + File.separator + fileName);
+                fos = new FileOutputStream(outputFolderPath + File.separator + fileName);
             } catch (FileNotFoundException ex) {
                 logger.log(Level.WARNING, "Invalid path provided for image extraction", ex);
                 continue;
@@ -140,7 +165,6 @@ public class ImageExtractor {
                 continue;
             }
             // TODO Extract more info from the Picture viz ctime, crtime, atime, mtime
-//            String fileRelativePath = "/" + moduleDirRelative + "/" + parentFileName + "/" + fileName;
             String fileRelativePath = File.separator + moduleDirRelative + File.separator + parentFileName + File.separator + fileName;
             long size = picture.getSize();
             ExtractedImage extractedimage = new ExtractedImage(fileName, fileRelativePath, size, af);
@@ -163,20 +187,24 @@ public class ImageExtractor {
             return null;
         }
         List<XWPFPictureData> listOfAllPictures = docxA.getAllPictures();
+
+        // if no images are extracted from the ppt, return null, else initialize
+        // the output folder for image extraction.
+        String outputFolderPath;
+        if (listOfAllPictures.isEmpty()) {
+            return null;
+        } else {
+            outputFolderPath = getOutputFolderPath(parentFileName);
+        }
+        if (outputFolderPath == null) {
+            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: " + af.getName());
+            return null;
+        }
         for (XWPFPictureData xwpfPicture : listOfAllPictures) {
             String fileName = xwpfPicture.getFileName();
             FileOutputStream fos = null;
             try {
-                String outputPath = moduleDirAbsolute + File.separator + parentFileName;
-                File outputFilePath = new File(outputPath);
-                if (!outputFilePath.exists()) {
-                    try {
-                        outputFilePath.mkdirs();
-                    } catch (SecurityException ex) {
-                        logger.log(Level.WARNING, "Unable to create the output path to write the extracted image",ex);
-                    }
-                }
-                fos = new FileOutputStream(moduleDirAbsolute + File.separator + parentFileName + File.separator + fileName);
+                fos = new FileOutputStream(outputFolderPath + File.separator + fileName);
             } catch (FileNotFoundException ex) {
                 logger.log(Level.WARNING, "Invalid path provided for image extraction", ex);
                 continue;
@@ -185,7 +213,8 @@ public class ImageExtractor {
                 fos.write(xwpfPicture.getData());
                 fos.close();
             } catch (IOException ex) {
-                Exceptions.printStackTrace(ex);
+                logger.log(Level.WARNING, "Could not write to the provided location", ex);
+                continue;
             }
             String fileRelativePath = File.separator + moduleDirRelative + File.separator + parentFileName + File.separator + fileName;
             long size = xwpfPicture.getData().length;
@@ -195,6 +224,281 @@ public class ImageExtractor {
         return listOfExtractedImages;
     }
 
+    private List<ExtractedImage> extractImagesFromPpt(AbstractFile af) {
+        // check for BBArtifact ENCRYPTION_DETECTED? Might be detected elsewhere...?
+        // TODO check for BBArtifact ENCRYPTION_DETECTED? Might be detected elsewhere...?
+        List<ExtractedImage> listOfExtractedImages = new ArrayList<ExtractedImage>();
+        String parentFileName = getUniqueName(af);
+        SlideShow ppt = null;
+        try {
+            ppt = new SlideShow(new ReadContentInputStream(af));
+        } catch (IOException ex) {
+            logger.log(Level.WARNING, "SlideShow container could not be instantiated while reading " + af.getName(), ex);
+            return null;
+        }
+
+        //extract all pictures contained in the presentation
+        PictureData[] listOfAllPictures = ppt.getPictureData();
+
+        // if no images are extracted from the ppt, return null, else initialize
+        // the output folder for image extraction.
+        String outputFolderPath;
+        if (listOfAllPictures.length == 0) {
+            return null;
+        } else {
+            outputFolderPath = getOutputFolderPath(parentFileName);
+        }
+        if (outputFolderPath == null) {
+            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: " + af.getName());
+            return null;
+        }
+
+        // extract the images to the above initialized outputFolder.
+        // extraction path - outputFolder/image_number.ext
+        int i = 0;
+        for (PictureData pictureData : listOfAllPictures) {
+
+            // Get image extension, generate image name, write image to the module
+            // output folder, add it to the listOfExtractedImages
+            int type = pictureData.getType();
+            String ext;
+            switch (type) {
+                case Picture.JPEG:
+                    ext = ".jpg";
+                    break;
+                case Picture.PNG:
+                    ext = ".png";
+                    break;
+                case Picture.WMF:
+                    ext = ".wmf";
+                    break;
+                case Picture.EMF:
+                    ext = ".emf";
+                    break;
+                case Picture.PICT:
+                    ext = ".pict";
+                    break;
+                default:
+                    continue;
+            }
+            String imageName = "image_" + i + ext;
+
+            FileOutputStream fos = null;
+            try {
+                fos = new FileOutputStream(outputFolderPath + File.separator + imageName);
+            } catch (FileNotFoundException ex) {
+                logger.log(Level.WARNING, "Invalid path provided for image extraction", ex);
+                continue;
+            }
+            try {
+                fos.write(pictureData.getData());
+                fos.close();
+                i++;
+            } catch (IOException ex) {
+                logger.log(Level.WARNING, "Could not write to the provided location", ex);
+                continue;
+            }
+
+            String fileRelativePath = File.separator + moduleDirRelative + File.separator + parentFileName + File.separator + imageName;
+            long size = pictureData.getData().length;
+            ExtractedImage extractedimage = new ExtractedImage(imageName, fileRelativePath, size, af);
+            listOfExtractedImages.add(extractedimage);
+        }
+        return listOfExtractedImages;
+    }
+
+    private List<ExtractedImage> extractImagesFromPptx(AbstractFile af) {
+        List<ExtractedImage> listOfExtractedImages = new ArrayList<ExtractedImage>();
+        String parentFileName = getUniqueName(af);
+        XMLSlideShow pptx;
+        try {
+            pptx = new XMLSlideShow(new ReadContentInputStream(af));
+        } catch (IOException ex) {
+            logger.log(Level.WARNING, "SlideShow container could not be instantiated while reading " + af.getName(), ex);
+            return null;
+        }
+        List<XSLFPictureData> listOfAllPictures = pptx.getAllPictures();
+
+        // if no images are extracted from the ppt, return null, else initialize
+        // the output folder for image extraction.
+        String outputFolderPath;
+        if (listOfAllPictures.isEmpty()) {
+            return null;
+        } else {
+            outputFolderPath = getOutputFolderPath(parentFileName);
+        }
+        if (outputFolderPath == null) {
+            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: " + af.getName());
+            return null;
+        }
+
+        for (XSLFPictureData xslsPicture : listOfAllPictures) {
+
+            // get image file name, write it to the module outputFolder, and add
+            // it to the listOfExtractedImages.
+            String fileName = xslsPicture.getFileName();
+            FileOutputStream fos = null;
+            try {
+                fos = new FileOutputStream(outputFolderPath + File.separator + fileName);
+            } catch (FileNotFoundException ex) {
+                logger.log(Level.WARNING, "Invalid path provided for image extraction", ex);
+                continue;
+            }
+            try {
+                fos.write(xslsPicture.getData());
+                fos.close();
+            } catch (IOException ex) {
+                logger.log(Level.WARNING, "Could not write to the provided location", ex);
+                continue;
+            }
+
+            String fileRelativePath = File.separator + moduleDirRelative + File.separator + parentFileName + File.separator + fileName;
+            long size = xslsPicture.getData().length;
+            ExtractedImage extractedimage = new ExtractedImage(fileName, fileRelativePath, size, af);
+            listOfExtractedImages.add(extractedimage);
+
+        }
+
+        return listOfExtractedImages;
+
+    }
+
+    private List<ExtractedImage> extractImagesFromXls(AbstractFile af) {
+        List<ExtractedImage> listOfExtractedImages = new ArrayList<ExtractedImage>();
+        String parentFileName = getUniqueName(af);
+
+        Workbook workbook;
+        try {
+            workbook = new HSSFWorkbook(new ReadContentInputStream(af));
+        } catch (IOException ex) {
+            logger.log(Level.WARNING, "HSSFWorkbook container could not be instantiated while reading " + af.getName(), ex);
+            return null;
+        }
+
+        List<? extends org.apache.poi.ss.usermodel.PictureData> listOfAllPictures = workbook.getAllPictures();
+        // if no images are extracted from the ppt, return null, else initialize
+        // the output folder for image extraction.
+        String outputFolderPath;
+        if (listOfAllPictures.isEmpty()) {
+            return null;
+        } else {
+            outputFolderPath = getOutputFolderPath(parentFileName);
+        }
+        if (outputFolderPath == null) {
+            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: " + af.getName());
+            return null;
+        }
+
+        int i = 0;
+        for (org.apache.poi.ss.usermodel.PictureData pictureData : listOfAllPictures) {
+            String imageName = "image_" + i + "." + pictureData.suggestFileExtension();
+            FileOutputStream fos = null;
+            try {
+                fos = new FileOutputStream(outputFolderPath + File.separator + imageName);
+            } catch (FileNotFoundException ex) {
+                logger.log(Level.WARNING, "Invalid path provided for image extraction", ex);
+                continue;
+            }
+            try {
+                fos.write(pictureData.getData());
+                fos.close();
+                i++;
+            } catch (IOException ex) {
+                logger.log(Level.WARNING, "Could not write to the provided location", ex);
+                continue;
+            }
+
+            String fileRelativePath = File.separator + moduleDirRelative + File.separator + parentFileName + File.separator + imageName;
+            long size = pictureData.getData().length;
+            ExtractedImage extractedimage = new ExtractedImage(imageName, fileRelativePath, size, af);
+            listOfExtractedImages.add(extractedimage);
+        }
+        return listOfExtractedImages;
+
+    }
+
+    private List<ExtractedImage> extractImagesFromXlsx(AbstractFile af) {
+        List<ExtractedImage> listOfExtractedImages = new ArrayList<ExtractedImage>();
+        String parentFileName = getUniqueName(af);
+
+        Workbook workbook;
+        try {
+            workbook = new XSSFWorkbook(new ReadContentInputStream(af));
+        } catch (IOException ex) {
+            logger.log(Level.WARNING, "HSSFWorkbook container could not be instantiated while reading " + af.getName(), ex);
+            return null;
+        }
+
+        List<? extends org.apache.poi.ss.usermodel.PictureData> listOfAllPictures = workbook.getAllPictures();
+        // if no images are extracted from the ppt, return null, else initialize
+        // the output folder for image extraction.
+        String outputFolderPath;
+        if (listOfAllPictures.isEmpty()) {
+            return null;
+        } else {
+            outputFolderPath = getOutputFolderPath(parentFileName);
+        }
+        if (outputFolderPath == null) {
+            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: " + af.getName());
+            return null;
+        }
+
+        int i = 0;
+        for (org.apache.poi.ss.usermodel.PictureData pictureData : listOfAllPictures) {
+            String imageName = "image_" + i + "." + pictureData.suggestFileExtension();
+            FileOutputStream fos = null;
+            try {
+                fos = new FileOutputStream(outputFolderPath + File.separator + imageName);
+            } catch (FileNotFoundException ex) {
+                logger.log(Level.WARNING, "Invalid path provided for image extraction", ex);
+                continue;
+            }
+            try {
+                fos.write(pictureData.getData());
+                fos.close();
+                i++;
+            } catch (IOException ex) {
+                logger.log(Level.WARNING, "Could not write to the provided location", ex);
+                continue;
+            }
+
+            String fileRelativePath = File.separator + moduleDirRelative + File.separator + parentFileName + File.separator + imageName;
+            long size = pictureData.getData().length;
+            ExtractedImage extractedimage = new ExtractedImage(imageName, fileRelativePath, size, af);
+            listOfExtractedImages.add(extractedimage);
+        }
+        return listOfExtractedImages;
+
+    }
+
+    /**
+     * Gets path to the output folder for image extraction. If the path does not
+     * exist, it is created.
+     *
+     * @param parentFileName name of the abstract file being processed for image
+     * extraction.
+     * @return path to the image extraction folder for a given abstract file.
+     */
+    private String getOutputFolderPath(String parentFileName) {
+        String outputFolderPath = moduleDirAbsolute + File.separator + parentFileName;
+        File outputFilePath = new File(outputFolderPath);
+        if (!outputFilePath.exists()) {
+            try {
+                outputFilePath.mkdirs();
+            } catch (SecurityException ex) {
+                logger.log(Level.WARNING, "Unable to create the output path to write the extracted image", ex);
+                return null;
+            }
+        }
+        return outputFolderPath;
+    }
+
+    /**
+     * Generates unique name for abstract files.
+     *
+     * @param af
+     * @return
+     */
     private String getUniqueName(AbstractFile af) {
         return af.getName() + "_" + af.getId();
     }
