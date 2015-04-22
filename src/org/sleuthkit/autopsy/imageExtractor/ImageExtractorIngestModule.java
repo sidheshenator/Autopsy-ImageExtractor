@@ -7,7 +7,6 @@ package org.sleuthkit.autopsy.imageExtractor;
 
 import java.util.logging.Level;
 import org.apache.tika.Tika;
-import org.openide.util.Exceptions;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.ingest.FileIngestModule;
 import org.sleuthkit.autopsy.ingest.IngestJobContext;
@@ -15,10 +14,6 @@ import org.sleuthkit.datamodel.AbstractFile;
 import org.sleuthkit.datamodel.TskCoreException;
 import org.sleuthkit.datamodel.TskData;
 
-/**
- *
- * @author sidhesh
- */
 public class ImageExtractorIngestModule implements FileIngestModule {
 
     private static final Logger logger = Logger.getLogger(ImageExtractorIngestModule.class.getName());
@@ -27,10 +22,12 @@ public class ImageExtractorIngestModule implements FileIngestModule {
     private SupportedFormats abstractFileFormat;
     private static final int BUFFER_SIZE = 64 * 1024;
     private final byte buffer[] = new byte[BUFFER_SIZE];
+    ImageExtractorModuleSettings settings;
 
-    ImageExtractorIngestModule() {
+    ImageExtractorIngestModule(ImageExtractorModuleSettings settings) {
         // currently, settings are not considered.
         // Both doc as well as docx files are processed.
+        this.settings =  settings;
     }
 
     protected enum SupportedFormats {
@@ -62,7 +59,7 @@ public class ImageExtractorIngestModule implements FileIngestModule {
             return ProcessResult.OK;
         }
 
-        if (abstractFile.isFile() == false || !isSupported(abstractFile)) {
+        if (abstractFile.isFile() == false || !isSupported(abstractFile) || !isEnabled(abstractFileFormat)) {
             return ProcessResult.OK;
         }
         try {
@@ -88,6 +85,10 @@ public class ImageExtractorIngestModule implements FileIngestModule {
     @Override
     public void shutDown() {
 
+    }
+    
+    private boolean isEnabled(SupportedFormats abstractFileFormat) {
+        return settings.getSupportedFormatState(abstractFileFormat.toString());
     }
 
     /**

@@ -24,7 +24,6 @@ import org.apache.poi.xslf.usermodel.XSLFPictureData;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFPictureData;
-import org.openide.util.Exceptions;
 import org.sleuthkit.autopsy.casemodule.Case;
 import org.sleuthkit.autopsy.casemodule.services.FileManager;
 import org.sleuthkit.autopsy.coreutils.Logger;
@@ -44,6 +43,7 @@ public class ImageExtractor {
     private String moduleDirRelative; //relative to the case, to store in db
     private String moduleDirAbsolute; //absolute, to extract to
     private static final Logger logger = Logger.getLogger(ImageExtractor.class.getName());
+    private final String UNKNOWN_NAME_PREFIX = "image_";
 
     ImageExtractor() {
 
@@ -145,7 +145,7 @@ public class ImageExtractor {
             outputFolderPath = getOutputFolderPath(parentFileName);
         }
         if (outputFolderPath == null) {
-            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: " + af.getName());
+            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: {0}", af.getName());
             return null;
         }
         for (org.apache.poi.hwpf.usermodel.Picture picture : listOfAllPictures) {
@@ -197,7 +197,7 @@ public class ImageExtractor {
             outputFolderPath = getOutputFolderPath(parentFileName);
         }
         if (outputFolderPath == null) {
-            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: " + af.getName());
+            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: {0}", af.getName());
             return null;
         }
         for (XWPFPictureData xwpfPicture : listOfAllPictures) {
@@ -249,7 +249,7 @@ public class ImageExtractor {
             outputFolderPath = getOutputFolderPath(parentFileName);
         }
         if (outputFolderPath == null) {
-            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: " + af.getName());
+            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: {0}", af.getName());
             return null;
         }
 
@@ -281,7 +281,7 @@ public class ImageExtractor {
                 default:
                     continue;
             }
-            String imageName = "image_" + i + ext;
+            String imageName = UNKNOWN_NAME_PREFIX + i + ext;
 
             FileOutputStream fos = null;
             try {
@@ -328,7 +328,7 @@ public class ImageExtractor {
             outputFolderPath = getOutputFolderPath(parentFileName);
         }
         if (outputFolderPath == null) {
-            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: " + af.getName());
+            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: {0}", af.getName());
             return null;
         }
 
@@ -385,13 +385,13 @@ public class ImageExtractor {
             outputFolderPath = getOutputFolderPath(parentFileName);
         }
         if (outputFolderPath == null) {
-            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: " + af.getName());
+            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: {0}", af.getName());
             return null;
         }
 
         int i = 0;
         for (org.apache.poi.ss.usermodel.PictureData pictureData : listOfAllPictures) {
-            String imageName = "image_" + i + "." + pictureData.suggestFileExtension();
+            String imageName = UNKNOWN_NAME_PREFIX + i + "." + pictureData.suggestFileExtension();
             FileOutputStream fos = null;
             try {
                 fos = new FileOutputStream(outputFolderPath + File.separator + imageName);
@@ -439,13 +439,13 @@ public class ImageExtractor {
             outputFolderPath = getOutputFolderPath(parentFileName);
         }
         if (outputFolderPath == null) {
-            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: " + af.getName());
+            logger.log(Level.WARNING, "Could not get path for image extraction from AbstractFile: {0}", af.getName());
             return null;
         }
 
         int i = 0;
         for (org.apache.poi.ss.usermodel.PictureData pictureData : listOfAllPictures) {
-            String imageName = "image_" + i + "." + pictureData.suggestFileExtension();
+            String imageName = UNKNOWN_NAME_PREFIX + i + "." + pictureData.suggestFileExtension();
             FileOutputStream fos = null;
             try {
                 fos = new FileOutputStream(outputFolderPath + File.separator + imageName);

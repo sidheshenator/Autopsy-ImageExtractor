@@ -12,6 +12,7 @@ import org.sleuthkit.autopsy.ingest.FileIngestModule;
 import org.sleuthkit.autopsy.ingest.IngestModuleFactory;
 import org.sleuthkit.autopsy.ingest.IngestModuleFactoryAdapter;
 import org.sleuthkit.autopsy.ingest.IngestModuleIngestJobSettings;
+import org.sleuthkit.autopsy.ingest.IngestModuleIngestJobSettingsPanel;
 
 /**
  *
@@ -52,12 +53,39 @@ public class ImageExtractorModuleFactory extends IngestModuleFactoryAdapter {
      * @inheritDoc
      */
     @Override
+    public IngestModuleIngestJobSettings getDefaultIngestJobSettings() {
+        return new ImageExtractorModuleSettings();
+    }
+    
+    @Override
+    public boolean hasIngestJobSettingsPanel() {
+        return true;
+    }
+    
+    
+    @Override
+    public IngestModuleIngestJobSettingsPanel getIngestJobSettingsPanel(IngestModuleIngestJobSettings settings) {
+        assert settings instanceof ImageExtractorModuleSettings;
+        if (!(settings instanceof ImageExtractorModuleSettings)) {
+            throw new IllegalArgumentException("");
+        }
+        return new ImageExtractorIngestJobSettingsPanel((ImageExtractorModuleSettings) settings);
+        
+    }
+    /**
+     * @inheritDoc
+     */
+    @Override
     public boolean isFileIngestModuleFactory() {
         return true;
     }
     
     @Override
     public FileIngestModule createFileIngestModule(IngestModuleIngestJobSettings settings) {
-        return (FileIngestModule) new ImageExtractorIngestModule();
+        assert settings instanceof ImageExtractorModuleSettings;
+        if (!(settings instanceof ImageExtractorModuleSettings)) {
+            throw new IllegalArgumentException("");
+        }
+        return new ImageExtractorIngestModule((ImageExtractorModuleSettings) settings);
     }
 }
